@@ -207,17 +207,23 @@ struct AITranslate: AsyncParsableCommand {
       model: .gpt4_turbo_preview
     )
 
-    guard let result = try? await openAI.chats(query: query) else {
+    do {
+      let result = try await openAI.chats(query: query)
+      let translation = result.choices.first?.message.content?.string ?? text
+
+      if verbose {
+        print("[\(target)] " + text + " -> " + translation)
+      }
+
+      return translation
+    } catch let error {
       print("[❌] Failed to translate \(text) into \(target)")
+
+      if verbose {
+        print("[💥]" + error.localizedDescription)
+      }
+
       return nil
     }
-
-    let translation = result.choices.first?.message.content?.string ?? text
-    
-    if verbose {
-      print("[\(target)] " + text + " -> " + translation)
-    }
-
-    return translation
   }
 }
