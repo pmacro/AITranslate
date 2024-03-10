@@ -10,7 +10,7 @@ This tools supports all the features that I currently use personally, which are 
 
 ## Usage
 
-Simply pull this repo, then run the command:
+Simply pull this repo, then run the following command from the repo root folder:
 
 ```
 swift run ai-translate /path/to/your/Localizable.xcstrings -o <your-openai-API-key> -v -l de,es,fr,he,it,ru,hi,en-GB
@@ -25,7 +25,7 @@ Help output:
     <input-file>
 
   OPTIONS:
-    -l, --languages <languages>
+    -l, --languages <languages> a comma separated list of language codes (must match the language codes used by xcstrings)
     -o, --open-ai-key <open-ai-key>
                             Your OpenAI API key, see: https://platform.openai.com/api-keys
     -v, --verbose
