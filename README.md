@@ -6,7 +6,7 @@ I have found that, while much cheaper than GPT4, GPT3.5 does not provide satisfa
 
 ## Missing Features
 
-This tools supports all the features that I currently use personally, which are not all of the features supported by `xcstrings`. Pull requests are welcome to add those missing features.
+This tool supports all the features that I currently use personally, which are not all of the features supported by `xcstrings`. Pull requests are welcome to add those missing features.
 
 ## Usage
 
