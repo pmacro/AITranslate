@@ -1,6 +1,6 @@
-# AITranslate
+# AI Translate
 
-This is a small, simple, utility that parses an Xcode `.xcstrings` file, asks ChatGPT to translate each entry, and then saves the results back in the `xcstring` JSON format.
+This is a small, simple, utility that parses an Xcode `.xcstrings` file, asks ChatGPT to translate each entry, and then saves the results back in the `xcstrings` JSON format.
 
 I have found that, while much cheaper than GPT4, GPT3.5 does not provide satisfactory results. Even with GPT4 (which is the hardcoded default used by this tool) I strongly recommend having translations tested as it will almost certainly not produce perfect results.
 
