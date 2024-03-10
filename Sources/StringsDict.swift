@@ -10,10 +10,10 @@ import Foundation
 class StringsDict: Codable {
   let sourceLanguage: String
   let version: String
-  var strings: [String: Localizations]
+  var strings: [String: LocalizationGroup]
 }
 
-class Localizations: Codable {
+class LocalizationGroup: Codable {
   let comment: String?
   let extractionState: String?
   var localizations: [String: LocalizationUnit]?

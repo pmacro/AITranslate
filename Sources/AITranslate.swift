@@ -1,8 +1,9 @@
-// The Swift Programming Language
-// https://docs.swift.org/swift-book
 //
-// Swift Argument Parser
-// https://swiftpackageindex.com/apple/swift-argument-parser/documentation
+//  AITranslate.swift
+//
+//
+//  Created by Paul MacRory on 3/7/24.
+//
 
 import ArgumentParser
 import OpenAI
@@ -10,6 +11,21 @@ import Foundation
 
 @main
 struct AITranslate: AsyncParsableCommand {
+  static let systemPrompt =
+    """
+    You are a translator tool that translates UI strings for a software application.
+    Your inputs will be a source language, a target language, the original text, and
+    optionally some context to help you understand the context of the original text within the application.
+    Each piece of information will be inside some XML-like tags, to help you understand the information.
+    In your response include *only* the translation, and do not include any metadata, tags, periods, quotes,
+    new lines, or speechmarks unless included in the original text.
+    """
+
+  static func gatherLanguages(from input: String) -> [String] {
+    input.split(separator: ",")
+      .map { String($0).trimmingCharacters(in: .whitespaces) }
+  }
+
   @Argument(transform: URL.init(fileURLWithPath:))
   var inputFile: URL
 
@@ -40,67 +56,46 @@ struct AITranslate: AsyncParsableCommand {
   )
   var force: Bool = false
 
-  static func gatherLanguages(from input: String) -> [String] {
-    input.split(separator: ",")
-      .map { String($0).trimmingCharacters(in: .whitespaces) }
-  }
-
-  mutating func run() async throws {
+  lazy var openAI: OpenAI = {
     let configuration = OpenAI.Configuration(
       token: openAIKey,
       organizationIdentifier: nil,
       timeoutInterval: 60.0
     )
 
-    let openAI = OpenAI(configuration: configuration)
+    return OpenAI(configuration: configuration)
+  }()
 
+  var numberOfTranslationsProcessed = 0
+
+  mutating func run() async throws {
     do {
       let dict = try JSONDecoder().decode(
         StringsDict.self,
         from: try Data(contentsOf: inputFile)
       )
 
-      let total = Double(dict.strings.count * languages.count)
-      var count: Double = 0
+      let totalNumberOfTranslations = dict.strings.count * languages.count
       let start = Date()
       var previousPercentage: Int = -1
 
       for entry in dict.strings {
-        let percentage = Int((count / total) * 100)
+        try await processEntry(
+          key: entry.key,
+          localizationGroup: entry.value,
+          sourceLanguage: dict.sourceLanguage
+        )
 
-        if percentage != previousPercentage, percentage % 10 == 0 {
-          print("\(percentage)%")
-          previousPercentage = percentage
+        let fractionProcessed = (Double(numberOfTranslationsProcessed) / Double(totalNumberOfTranslations))
+        let percentageProcessed = Int(fractionProcessed * 100)
+
+        // Print the progress at 10% intervals.
+        if percentageProcessed != previousPercentage, percentageProcessed % 10 == 0 {
+          print("[⏳] \(percentageProcessed)%")
+          previousPercentage = percentageProcessed
         }
 
-        for lang in languages {
-          count += 1
-          let localizations = entry.value.localizations ?? [:]
-
-          guard force || localizations[lang] == nil else {
-            continue
-          }
-
-          // The source text can either be the key or an explicit value in the `localizations`
-          // dictionary keyed by `sourceLanguage`.
-          let sourceText = localizations[dict.sourceLanguage]?.stringUnit.value ?? entry.key
-
-          let result = try await performTranslation(
-            sourceText,
-            from: dict.sourceLanguage,
-            to: lang,
-            context: entry.value.comment,
-            openAI: openAI
-          )
-
-          entry.value.localizations = localizations
-          entry.value.localizations?[lang] = LocalizationUnit(
-            stringUnit: StringUnit(
-              state: result == nil ? "error" : "translated",
-              value: result ?? ""
-            )
-          )
-        }
+        numberOfTranslationsProcessed += languages.count
       }
 
       try save(dict)
@@ -110,9 +105,46 @@ struct AITranslate: AsyncParsableCommand {
       formatter.unitsStyle = .full
       let formattedString = formatter.string(from: Date().timeIntervalSince(start))!
 
-      print("100% ✅\nTranslations time: \(formattedString) 🕝")
+      print("[✅] 100% \n[⏰] Translations time: \(formattedString)")
     } catch let error {
       throw error
+    }
+  }
+
+  mutating func processEntry(
+    key: String,
+    localizationGroup: LocalizationGroup,
+    sourceLanguage: String
+  ) async throws {
+    for lang in languages {
+      let localizationEntries = localizationGroup.localizations ?? [:]
+
+      guard force || 
+              localizationEntries[lang] == nil ||
+              localizationEntries[lang]?.stringUnit.value.isEmpty == true
+      else {
+        continue
+      }
+
+      // The source text can either be the key or an explicit value in the `localizations`
+      // dictionary keyed by `sourceLanguage`.
+      let sourceText = localizationEntries[sourceLanguage]?.stringUnit.value ?? key
+
+      let result = try await performTranslation(
+        sourceText,
+        from: sourceLanguage,
+        to: lang,
+        context: localizationGroup.comment,
+        openAI: openAI
+      )
+
+      localizationGroup.localizations = localizationEntries
+      localizationGroup.localizations?[lang] = LocalizationUnit(
+        stringUnit: StringUnit(
+          state: result == nil ? "error" : "translated",
+          value: result ?? ""
+        )
+      )
     }
   }
 
@@ -159,8 +191,6 @@ struct AITranslate: AsyncParsableCommand {
       return text
     }
 
-    let prompt = "You are a translator tool that translates UI strings for a software application. Your inputs will be a source language, a target language, the original text, and optionally some context to help you understand the context of the original text within the application. Each piece of information will be inside some XML-like tags, to help you understand the information. In your response include *only* the translation, and do not include any metadata, tags, periods, quotes, new lines, or speechmarks unless included in the original text."
-
     var translationRequest = "<source>\(source)</source><target>\(target)</target>"
     translationRequest += "<original>\(text)</original>"
 
@@ -170,14 +200,14 @@ struct AITranslate: AsyncParsableCommand {
 
     let query = ChatQuery(
       messages: [
-        .init(role: .system, content: prompt)!,
+        .init(role: .system, content: Self.systemPrompt)!,
         .init(role: .user, content: translationRequest)!
       ],
       model: .gpt4_turbo_preview
     )
 
     guard let result = try? await openAI.chats(query: query) else {
-      print("Error: Failed to translate \(text)")
+      print("[❌] Failed to translate \(text)")
       return nil
     }
 
