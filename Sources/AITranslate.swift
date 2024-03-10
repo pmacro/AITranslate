@@ -14,13 +14,13 @@ struct AITranslate: AsyncParsableCommand {
   var inputFile: URL
 
   @Option(
-    name: .customShort("l"),
+    name: .shortAndLong,
     transform: AITranslate.gatherLanguages(from:)
   )
   var languages: [String]
 
   @Option(
-    name: .customShort("a"),
+    name: .shortAndLong,
     help: ArgumentHelp("Your OpenAI API key, see: https://platform.openai.com/api-keys")
   )
   var openAIKey: String

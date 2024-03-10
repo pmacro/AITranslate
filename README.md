@@ -9,5 +9,23 @@ I have found that, while much cheaper than GPT4, GPT3.5 does not provide satisfa
 Simply pull this repo, then run the command:
 
 ```
-swift run ai-translate /path/to/your/Localizable.xcstrings -a <your-openai-API-key> -v -l de,es,fr,he,it,ru,hi,en-GB
+swift run ai-translate /path/to/your/Localizable.xcstrings -o <your-openai-API-key> -v -l de,es,fr,he,it,ru,hi,en-GB
+```
+
+Help output:
+
+```
+  USAGE: ai-translate <input-file> --languages <languages> --open-ai-key <open-ai-key> [--verbose] [--skip-backup] [--force]
+
+  ARGUMENTS:
+    <input-file>
+
+  OPTIONS:
+    -l, --languages <languages>
+    -o, --open-ai-key <open-ai-key>
+                            Your OpenAI API key, see: https://platform.openai.com/api-keys
+    -v, --verbose
+    -s, --skip-backup       By default a backup of the input will be created. When this flag is provided, the backup is skipped.
+    -f, --force             Forces all strings to be translated, even if an existing translation is present.
+    -h, --help              Show help information.
 ```
