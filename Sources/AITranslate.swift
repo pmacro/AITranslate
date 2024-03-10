@@ -31,6 +31,7 @@ struct AITranslate: AsyncParsableCommand {
 
   @Option(
     name: .shortAndLong,
+    help: ArgumentHelp("A comma separated list of language codes (must match the language codes used by xcstrings)"), 
     transform: AITranslate.gatherLanguages(from:)
   )
   var languages: [String]
@@ -207,7 +208,7 @@ struct AITranslate: AsyncParsableCommand {
     )
 
     guard let result = try? await openAI.chats(query: query) else {
-      print("[❌] Failed to translate \(text)")
+      print("[❌] Failed to translate \(text) into \(target)")
       return nil
     }
 
