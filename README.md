@@ -2,11 +2,13 @@
 
 This is a small, simple, utility that parses an Xcode `.xcstrings` file, asks ChatGPT to translate each entry, and then saves the results back in the `xcstrings` JSON format.
 
-I have found that, while much cheaper than GPT4, GPT3.5 does not provide satisfactory results. Even with GPT4 (which is the hardcoded default used by this tool) I strongly recommend having translations tested by a qualified human as this tool will almost certainly not produce perfect results.
+This tool is hardcoded to use ChatGPT-4. While ChatGPT3.5 is significantly less expensive, it does not provide satisfactory results. Selecting a model via a command-line flag has been deliberately omitted for this reason, thus ensuring this tool does not contribute to a proliferation of poor translations in apps on Apple platforms.  
+
+Please note that is **very strongly** recommend to have translations tested by a qualified human as even ChatGPT-4 will almost certainly not produce perfect results.
 
 ## Missing Features
 
-This tool supports all the features that I currently use personally, which are not all of the features supported by `xcstrings`. Pull requests are welcome to add those missing features.
+This tool supports all the features that I currently use personally, which are not all of the features supported by `xcstrings` (for example, I have not tested plural strings, or strings that vary by device). Pull requests are welcome to add those missing features.
 
 ## Usage
 

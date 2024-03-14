@@ -15,10 +15,10 @@ struct AITranslate: AsyncParsableCommand {
     """
     You are a translator tool that translates UI strings for a software application.
     Your inputs will be a source language, a target language, the original text, and
-    optionally some context to help you understand the context of the original text within the application.
-    Each piece of information will be inside some XML-like tags, to help you understand the information.
-    In your response include *only* the translation, and do not include any metadata, tags, periods, quotes,
-    new lines, or speechmarks unless included in the original text.
+    optionally some context to help you understand how the original text is used within
+    the application. Each piece of information will be inside some XML-like tags.
+    In your response include *only* the translation, and do not include any metadata, tags, 
+    periods, quotes, or new lines, unless included in the original text.
     """
 
   static func gatherLanguages(from input: String) -> [String] {
@@ -120,7 +120,10 @@ struct AITranslate: AsyncParsableCommand {
     for lang in languages {
       let localizationEntries = localizationGroup.localizations ?? [:]
 
-      guard force || 
+      // i.e. process the entry only if either:
+      // - there is no current translation, or
+      // - the `force` flag has been specified.
+      guard force ||
               localizationEntries[lang] == nil ||
               localizationEntries[lang]?.stringUnit.value.isEmpty == true
       else {
@@ -182,7 +185,7 @@ struct AITranslate: AsyncParsableCommand {
     openAI: OpenAI
   ) async throws -> String? {
 
-    // Skip that is generally not translated.
+    // Skip text that is generally not translated.
     if text.isEmpty ||
         text.trimmingCharacters(
           in: .whitespacesAndNewlines
