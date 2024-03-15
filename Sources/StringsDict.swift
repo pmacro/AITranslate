@@ -14,25 +14,63 @@ class StringsDict: Codable {
 }
 
 class LocalizationGroup: Codable {
-  let comment: String?
-  let extractionState: String?
+  var comment: String?
+  var extractionState: String?
   var localizations: [String: LocalizationUnit]?
 }
 
 class LocalizationUnit: Codable {
-  let stringUnit: StringUnit
+  var stringUnit: StringUnit?
+  var variations: VariationsUnit?
+  var substitutions: [String: SubstitutionsUnit]?
 
-  init(stringUnit: StringUnit) {
+  init(stringUnit: StringUnit?, variations: VariationsUnit? = nil, substitutions: [String: SubstitutionsUnit]? = nil) {
     self.stringUnit = stringUnit
+    self.variations = variations
+    self.substitutions = substitutions
   }
 }
 
 class StringUnit: Codable {
-  let state: String
-  let value: String
+  var state: String
+  var value: String
 
   init(state: String, value: String) {
     self.state = state
     self.value = value
   }
+}
+
+class VariationsUnit: Codable {
+  var plural: PluralVariation?
+  var device: DeviceVariation?
+}
+
+class SubstitutionsUnit: Codable {
+  var formatSpecifier: String
+  var variations: VariationsUnit
+}
+
+class PluralVariation: Codable {
+  var zero: VariationStringUnit?
+  var one: VariationStringUnit?
+  var two: VariationStringUnit?
+  var few: VariationStringUnit?
+  var many: VariationStringUnit?
+  var other: VariationStringUnit?
+}
+
+class DeviceVariation: Codable {
+  var appletv: VariationStringUnit?
+  var applevision: VariationStringUnit?
+  var applewatch: VariationStringUnit?
+  var ipad: VariationStringUnit?
+  var iphone: VariationStringUnit?
+  var ipod: VariationStringUnit?
+  var mac: VariationStringUnit?
+  var other: VariationStringUnit?
+}
+
+class VariationStringUnit: Codable {
+  var stringUnit: StringUnit
 }

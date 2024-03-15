@@ -125,14 +125,20 @@ struct AITranslate: AsyncParsableCommand {
       // - the `force` flag has been specified.
       guard force ||
               localizationEntries[lang] == nil ||
-              localizationEntries[lang]?.stringUnit.value.isEmpty == true
+              localizationEntries[lang]?.stringUnit?.value.isEmpty == true,
+
+            // skip the ones with variations since they are not supported.
+            localizationEntries[lang]?.variations == nil,
+
+            // skip the ones with substitutions since they are not supported.
+            localizationEntries[lang]?.substitutions == nil
       else {
         continue
       }
 
       // The source text can either be the key or an explicit value in the `localizations`
       // dictionary keyed by `sourceLanguage`.
-      let sourceText = localizationEntries[sourceLanguage]?.stringUnit.value ?? key
+      let sourceText = localizationEntries[sourceLanguage]?.stringUnit?.value ?? key
 
       let result = try await performTranslation(
         sourceText,
@@ -154,7 +160,7 @@ struct AITranslate: AsyncParsableCommand {
 
   func save(_ dict: StringsDict) throws {
     let encoder = JSONEncoder()
-    encoder.outputFormatting = .prettyPrinted
+    encoder.outputFormatting = [.sortedKeys, .prettyPrinted, .withoutEscapingSlashes]
     let data = try encoder.encode(dict)
 
     try backupInputFileIfNecessary()
