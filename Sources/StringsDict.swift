@@ -24,7 +24,19 @@ class LocalizationUnit: Codable {
   var variations: VariationsUnit?
   var substitutions: [String: SubstitutionsUnit]?
 
-  init(stringUnit: StringUnit?, variations: VariationsUnit? = nil, substitutions: [String: SubstitutionsUnit]? = nil) {
+  var isSupportedFormat: Bool {
+    variations == nil && substitutions == nil
+  }
+
+  var hasTranslation: Bool {
+    stringUnit?.value.isEmpty == false
+  }
+
+  init(
+    stringUnit: StringUnit?,
+    variations: VariationsUnit? = nil,
+    substitutions: [String: SubstitutionsUnit]? = nil
+  ) {
     self.stringUnit = stringUnit
     self.variations = variations
     self.substitutions = substitutions
@@ -35,7 +47,10 @@ class StringUnit: Codable {
   var state: String
   var value: String
 
-  init(state: String, value: String) {
+  init(
+    state: String,
+    value: String
+  ) {
     self.state = state
     self.value = value
   }

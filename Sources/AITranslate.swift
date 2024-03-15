@@ -119,20 +119,16 @@ struct AITranslate: AsyncParsableCommand {
   ) async throws {
     for lang in languages {
       let localizationEntries = localizationGroup.localizations ?? [:]
+      let unit = localizationEntries[lang]
 
-      // i.e. process the entry only if either:
-      // - there is no current translation, or
-      // - the `force` flag has been specified.
-      guard force ||
-              localizationEntries[lang] == nil ||
-              localizationEntries[lang]?.stringUnit?.value.isEmpty == true,
+      // Nothing to do.
+      if let unit, unit.hasTranslation, force == false {
+        continue
+      }
 
-            // skip the ones with variations since they are not supported.
-            localizationEntries[lang]?.variations == nil,
-
-            // skip the ones with substitutions since they are not supported.
-            localizationEntries[lang]?.substitutions == nil
-      else {
+      // Skip the ones with variations/substitutions since they are not supported.
+      if let unit, unit.isSupportedFormat == false {
+        print("[⚠️] Unsupported format in entry with key: \(key)")
         continue
       }
 
@@ -201,7 +197,8 @@ struct AITranslate: AsyncParsableCommand {
       return text
     }
 
-    var translationRequest = "<source>\(source)</source><target>\(target)</target>"
+    var translationRequest = "<source>\(source)</source>"
+    translationRequest += "<target>\(target)</target>"
     translationRequest += "<original>\(text)</original>"
 
     if let context {
