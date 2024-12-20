@@ -41,6 +41,12 @@ struct AITranslate: AsyncParsableCommand {
     help: ArgumentHelp("Your OpenAI API key, see: https://platform.openai.com/api-keys")
   )
   var openAIKey: String
+    
+  @Option(
+    name: .customLong("host"),
+    help: ArgumentHelp("Your OpenAI Proxy Host")
+  )
+  var openAIHost: String = "api.openai.com"
 
   @Flag(name: .shortAndLong)
   var verbose: Bool = false
@@ -61,6 +67,7 @@ struct AITranslate: AsyncParsableCommand {
     let configuration = OpenAI.Configuration(
       token: openAIKey,
       organizationIdentifier: nil,
+      host: openAIHost,
       timeoutInterval: 60.0
     )
 
@@ -136,13 +143,21 @@ struct AITranslate: AsyncParsableCommand {
       // dictionary keyed by `sourceLanguage`.
       let sourceText = localizationEntries[sourceLanguage]?.stringUnit?.value ?? key
 
-      let result = try await performTranslation(
-        sourceText,
-        from: sourceLanguage,
-        to: lang,
-        context: localizationGroup.comment,
-        openAI: openAI
-      )
+      let result: String?
+      if (localizationGroup.shouldTranslate != false){
+        result = try await performTranslation(
+          sourceText,
+          from: sourceLanguage,
+          to: lang,
+          context: localizationGroup.comment,
+          openAI: openAI
+        )
+      } else {
+        result = key
+        if verbose {
+          print("[\(lang)] " + key + " -> skip")
+        }
+      }
 
       localizationGroup.localizations = localizationEntries
       localizationGroup.localizations?[lang] = LocalizationUnit(

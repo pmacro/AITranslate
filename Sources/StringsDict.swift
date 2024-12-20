@@ -16,6 +16,7 @@ class StringsDict: Codable {
 class LocalizationGroup: Codable {
   var comment: String?
   var extractionState: String?
+  var shouldTranslate: Bool?
   var localizations: [String: LocalizationUnit]?
 }
 
