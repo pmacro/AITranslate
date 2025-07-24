@@ -48,6 +48,12 @@ struct AITranslate: AsyncParsableCommand {
   )
   var openAIHost: String = "api.openai.com"
 
+  @Option(
+    name: .shortAndLong,
+    help: ArgumentHelp("Your Model, see: https://platform.openai.com/docs/models, e,g (gpt-3.5-turbo, gpt-4o-mini, gpt-4o)")
+  )
+  var model: String = "gpt-4o"
+
   @Flag(name: .shortAndLong)
   var verbose: Bool = false
 
@@ -225,7 +231,7 @@ struct AITranslate: AsyncParsableCommand {
         .init(role: .system, content: Self.systemPrompt)!,
         .init(role: .user, content: translationRequest)!
       ],
-      model: .gpt4_o
+      model: model
     )
 
     do {
