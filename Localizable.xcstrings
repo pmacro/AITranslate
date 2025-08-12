@@ -1,0 +1,17 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "3-day free trial" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "3-day free trial"
+          }
+        },
+      }
+    },
+    
+  },
+  "version" : "1.0"
+}
