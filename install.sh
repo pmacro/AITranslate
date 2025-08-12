@@ -104,7 +104,7 @@ install_ai_translate() {
     print_info "开始安装 AI Translate..."
     
     # 下载 URL
-    DOWNLOAD_URL="https://github.com/kimliss/fork-AITranslate/releases/download/v1.0.0/ai-translate"
+    DOWNLOAD_URL="https://github.com/kimliss/fork-AITranslate/releases/download/v1.0.0/ai-translate-$ARCH"
     
     # 创建临时目录
     TEMP_DIR=$(mktemp -d)
