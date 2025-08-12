@@ -15,13 +15,20 @@ This tool supports all the features that I currently use personally, which are n
 Simply pull this repo, then run the following command from the repo root folder:
 
 ```
-swift run ai-translate /path/to/your/Localizable.xcstrings -o <your-openai-API-key> -v -l de,es,fr,he,it,ru,hi,en-GB
+## install
+curl -fsSL https://raw.githubusercontent.com/kimliss/fork-AITranslate/refs/heads/main/install.sh | bash
+## uninstall 
+curl -fsSL https://raw.githubusercontent.com/kimliss/fork-AITranslate/refs/heads/main/install.sh | bash install.sh uninstall
+## use
+ai-translate /path/to/your/Localizable.xcstrings -o <your-openai-API-key> -v -l de,es,fr,he,it,ru,hi,en-GB
+### use env config
+curl -o .env https://raw.githubusercontent.com/kimliss/fork-AITranslate/refs/heads/main/.env.example
 ```
 
 Help output:
 
 ```
-  USAGE: ai-translate <input-file> --languages <languages> --open-ai-key <open-ai-key> [--verbose] [--skip-backup] [--force]
+  USAGE: ai-translate <input-file> --languages <languages> --open-ai-key <open-ai-key> [--host <host>] [--model <model>] [--verbose] [--skip-backup] [--force]
 
   ARGUMENTS:
     <input-file>

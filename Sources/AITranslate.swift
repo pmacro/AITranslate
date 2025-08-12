@@ -25,6 +25,41 @@ struct AITranslate: AsyncParsableCommand {
     input.split(separator: ",")
       .map { String($0).trimmingCharacters(in: .whitespaces) }
   }
+  
+  // 从 .env 文件读取环境变量
+  static func loadEnvFile() -> [String: String] {
+    let envPath = FileManager.default.currentDirectoryPath + "/.env"
+    let envURL = URL(fileURLWithPath: envPath)
+    
+    guard let envContent = try? String(contentsOf: envURL) else {
+      return [:]
+    }
+    
+    var envVars: [String: String] = [:]
+    let lines = envContent.components(separatedBy: .newlines)
+    
+    for line in lines {
+      let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
+      
+      // 跳过空行和注释行
+      if trimmedLine.isEmpty || trimmedLine.hasPrefix("#") {
+        continue
+      }
+      
+      // 分割键值对
+      let components = trimmedLine.components(separatedBy: "=")
+      if components.count >= 2 {
+        let key = components[0].trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = components.dropFirst().joined(separator: "=")
+          .trimmingCharacters(in: .whitespacesAndNewlines)
+          .trimmingCharacters(in: CharacterSet(charactersIn: "\"'")) // 移除引号
+        
+        envVars[key] = value
+      }
+    }
+    
+    return envVars
+  }
 
   @Argument(transform: URL.init(fileURLWithPath:))
   var inputFile: URL
@@ -34,25 +69,25 @@ struct AITranslate: AsyncParsableCommand {
     help: ArgumentHelp("A comma separated list of language codes (must match the language codes used by xcstrings)"), 
     transform: AITranslate.gatherLanguages(from:)
   )
-  var languages: [String]
+  var languages: [String] = []
 
   @Option(
     name: .shortAndLong,
     help: ArgumentHelp("Your OpenAI API key, see: https://platform.openai.com/api-keys")
   )
-  var openAIKey: String
+  var openAIKey: String = ""
     
   @Option(
     name: .customLong("host"),
     help: ArgumentHelp("Your OpenAI Proxy Host")
   )
-  var openAIHost: String = "api.openai.com"
+  var openAIHost: String = ""
 
   @Option(
     name: .shortAndLong,
     help: ArgumentHelp("Your Model, see: https://platform.openai.com/docs/models, e,g (gpt-3.5-turbo, gpt-4o-mini, gpt-4o)")
   )
-  var model: String = "gpt-4o"
+  var model: String = ""
 
   @Flag(name: .shortAndLong)
   var verbose: Bool = false
@@ -69,11 +104,17 @@ struct AITranslate: AsyncParsableCommand {
   )
   var force: Bool = false
 
+  // 处理参数优先级的属性
+  private var resolvedLanguages: [String] = []
+  private var resolvedOpenAIKey: String = ""
+  private var resolvedOpenAIHost: String = ""
+  private var resolvedModel: String = ""
+
   lazy var openAI: OpenAI = {
     let configuration = OpenAI.Configuration(
-      token: openAIKey,
+      token: resolvedOpenAIKey,
       organizationIdentifier: nil,
-      host: openAIHost,
+      host: resolvedOpenAIHost,
       timeoutInterval: 60.0
     )
 
@@ -83,13 +124,44 @@ struct AITranslate: AsyncParsableCommand {
   var numberOfTranslationsProcessed = 0
 
   mutating func run() async throws {
+    // 加载 .env 文件
+    let envVars = Self.loadEnvFile()
+    
+    // 解析参数优先级：命令行 > .env
+    resolvedLanguages = languages.isEmpty ? 
+      Self.gatherLanguages(from: envVars["LANGUAGES"] ?? "") : languages
+    
+    resolvedOpenAIKey = openAIKey.isEmpty ? 
+      (envVars["OPENAI_API_KEY"] ?? "") : openAIKey
+    
+    resolvedOpenAIHost = openAIHost.isEmpty ? 
+      (envVars["OPENAI_HOST"] ?? "api.openai.com") : openAIHost
+    
+    resolvedModel = model.isEmpty ? 
+      (envVars["MODEL"] ?? "gpt-4o-mini") : model
+    
+    // 验证必要参数
+    guard !resolvedLanguages.isEmpty else {
+      throw ValidationError("Languages must be specified either via command line (-l) or .env file (LANGUAGES)")
+    }
+    
+    guard !resolvedOpenAIKey.isEmpty else {
+      throw ValidationError("OpenAI API key must be specified either via command line (-k) or .env file (OPENAI_API_KEY)")
+    }
+    
+    if verbose {
+      print("[📁] Using languages: \(resolvedLanguages.joined(separator: ", "))")
+      print("[🤖] Using model: \(resolvedModel)")
+      print("[🌐] Using host: \(resolvedOpenAIHost)")
+    }
+
     do {
       let dict = try JSONDecoder().decode(
         StringsDict.self,
         from: try Data(contentsOf: inputFile)
       )
 
-      let totalNumberOfTranslations = dict.strings.count * languages.count
+      let totalNumberOfTranslations = dict.strings.count * resolvedLanguages.count
       let start = Date()
       var previousPercentage: Int = -1
 
@@ -109,7 +181,7 @@ struct AITranslate: AsyncParsableCommand {
           previousPercentage = percentageProcessed
         }
 
-        numberOfTranslationsProcessed += languages.count
+        numberOfTranslationsProcessed += resolvedLanguages.count
       }
 
       try save(dict)
@@ -130,7 +202,7 @@ struct AITranslate: AsyncParsableCommand {
     localizationGroup: LocalizationGroup,
     sourceLanguage: String
   ) async throws {
-    for lang in languages {
+    for lang in resolvedLanguages {
       let localizationEntries = localizationGroup.localizations ?? [:]
       let unit = localizationEntries[lang]
 
@@ -231,7 +303,7 @@ struct AITranslate: AsyncParsableCommand {
         .init(role: .system, content: Self.systemPrompt)!,
         .init(role: .user, content: translationRequest)!
       ],
-      model: model
+      model: resolvedModel
     )
 
     do {
