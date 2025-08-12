@@ -10,33 +10,43 @@ Please note that is **very strongly** recommend to have translations tested by a
 
 This tool supports all the features that I currently use personally, which are not all of the features supported by `xcstrings` (for example, I have not tested plural strings, or strings that vary by device). Pull requests are welcome to add those missing features.
 
-## Usage
+## Install
 
-Simply pull this repo, then run the following command from the repo root folder:
-
-```
+```bash
 ## install
 curl -fsSL https://raw.githubusercontent.com/kimliss/fork-AITranslate/refs/heads/main/install.sh | bash
 ## uninstall 
 curl -fsSL https://raw.githubusercontent.com/kimliss/fork-AITranslate/refs/heads/main/install.sh | bash install.sh uninstall
-## use
+```
+
+## Usage
+
+Run the following command from the repo root folder:
+
+```bash
+## use common args
 ai-translate /path/to/your/Localizable.xcstrings -o <your-openai-API-key> -v -l de,es,fr,he,it,ru,hi,en-GB
-### use env config
+## use env config
 curl -o .env https://raw.githubusercontent.com/kimliss/fork-AITranslate/refs/heads/main/.env.example
+echo ".env" >> .gitignore
+ai-translate /path/to/your/Localizable.xcstrings
 ```
 
 Help output:
 
 ```
-  USAGE: ai-translate <input-file> --languages <languages> --open-ai-key <open-ai-key> [--host <host>] [--model <model>] [--verbose] [--skip-backup] [--force]
+  USAGE: ai-translate <input-file> [--languages <languages>] [--open-ai-key <open-ai-key>] [--host <host>] [--model <model>] [--verbose] [--skip-backup] [--force]
 
   ARGUMENTS:
     <input-file>
 
   OPTIONS:
-    -l, --languages <languages> a comma separated list of language codes (must match the language codes used by xcstrings)
+    -l, --languages <languages>
+                            A comma separated list of language codes (must match the language codes used by xcstrings)
     -o, --open-ai-key <open-ai-key>
                             Your OpenAI API key, see: https://platform.openai.com/api-keys
+    --host <host>           Your OpenAI Proxy Host
+    -m, --model <model>     Your Model, see: https://platform.openai.com/docs/models, e,g (gpt-3.5-turbo, gpt-4o-mini, gpt-4o)
     -v, --verbose
     -s, --skip-backup       By default a backup of the input will be created. When this flag is provided, the backup is skipped.
     -f, --force             Forces all strings to be translated, even if an existing translation is present.
