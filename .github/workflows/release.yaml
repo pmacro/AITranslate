@@ -1,0 +1,47 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main  # 当代码合并到 main 分支时触发
+
+jobs:
+  build-and-release:
+    runs-on: macos-latest  # 必须用 macOS，因为要用 Swift 和 lipo
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Swift
+        run: swift --version  # macOS 自带 Swift，一般不需要额外安装
+
+      - name: Make build.sh executable
+        run: chmod +x ./build.sh
+
+      - name: Run build script
+        run: ./build.sh
+
+      - name: Get version from tag or commit
+        id: vars
+        run: |
+          # 如果有 tag，就用 tag 作为版本号，否则用 commit 短哈希
+          if [ -n "${GITHUB_REF##refs/tags/*}" ]; then
+            VERSION="commit-${GITHUB_SHA::7}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.vars.outputs.version }}
+          name: "Release ${{ steps.vars.outputs.version }}"
+          draft: false
+          prerelease: false
+          files: |
+            .build/universal/ai-translate
+            .build/universal/ai-translate-amd64
+            .build/universal/ai-translate-arm64
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
