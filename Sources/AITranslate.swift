@@ -63,6 +63,18 @@ struct AITranslate: AsyncParsableCommand {
     return envVars
   }
 
+  // 命令名称和概述会在帮助信息中显示
+  static let configuration = CommandConfiguration(
+      abstract: "A command line tool that performs translation of xcstrings",
+      usage: """
+      ai-translate /path/to/your/Localizable.xcstrings
+      ai-translate /path/to/your/Localizable.xcstrings -v -f
+      """,
+      discussion: """
+      VERSION: 1.0.0
+      """
+  )
+
   @Argument(transform: URL.init(fileURLWithPath:))
   var inputFile: URL
 

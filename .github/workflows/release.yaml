@@ -3,17 +3,20 @@ name: Release
 on:
   push:
     branches:
-      - main  # 当代码合并到 main 分支时触发
+      - main
+    paths:
+      - "Sources/**" # 只有 Sources 目录下有变更才触发
+  workflow_dispatch: # 支持手动触发
 
 jobs:
   build-and-release:
-    runs-on: macos-latest  # 必须用 macOS，因为要用 Swift 和 lipo
+    runs-on: macos-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Set up Swift
-        run: swift --version  # macOS 自带 Swift，一般不需要额外安装
+        run: swift --version
 
       - name: Make build.sh executable
         run: chmod +x ./build.sh
@@ -21,16 +24,18 @@ jobs:
       - name: Run build script
         run: ./build.sh
 
-      - name: Get version from tag or commit
+      - name: Generate version by timestamp
         id: vars
         run: |
-          # 如果有 tag，就用 tag 作为版本号，否则用 commit 短哈希
-          if [ -n "${GITHUB_REF##refs/tags/*}" ]; then
-            VERSION="commit-${GITHUB_SHA::7}"
-          else
-            VERSION="${GITHUB_REF#refs/tags/}"
-          fi
+          VERSION="v$(date +'%Y%m%d-%H%M%S')"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+      
+      - name: Sync version to AITranslate.swift
+        run: |
+          VERSION=${{ steps.vars.outputs.version }}
+          sed -i.bak "s|// VERSION: 1.0.0|// version: ${VERSION}|" AITranslate.swift
+          rm AITranslate.swift.bak
+          echo "Updated AITranslate.swift version to ${VERSION}"
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
