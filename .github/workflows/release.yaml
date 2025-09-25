@@ -32,6 +32,7 @@ jobs:
       
       - name: Sync version to AITranslate.swift
         run: |
+          cd Sources
           VERSION=${{ steps.vars.outputs.version }}
           sed -i.bak "s|// VERSION: 1.0.0|// version: ${VERSION}|" AITranslate.swift
           rm AITranslate.swift.bak
