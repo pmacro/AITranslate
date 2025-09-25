@@ -13,7 +13,7 @@ This tool supports all the features that I currently use personally, which are n
 ## Install
 
 ```bash
-## install
+## install or update
 curl -fsSL https://raw.githubusercontent.com/kimliss/fork-AITranslate/refs/heads/main/install.sh | bash
 ## uninstall 
 curl -fsSL https://raw.githubusercontent.com/kimliss/fork-AITranslate/refs/heads/main/install.sh | bash install.sh uninstall
