@@ -19,6 +19,8 @@ struct AITranslate: AsyncParsableCommand {
     the application. Each piece of information will be inside some XML-like tags.
     In your response include *only* the translation, and do not include any metadata, tags, 
     periods, quotes, or new lines, unless included in the original text.
+    Placeholders (like %@, %d, %1$@, etc) should be preserved exactly as they appear in the original text.
+    Treat multi-letter abbreviations (such as common technical acronyms like "HTML", "URL", "API", "HTTP", "HTTPS", "JSON", "XML", "CPU", "GPU", "RAM", "ID", "UI", "UX", etc) as case-sensitive and do not translate them.
     """
 
   static func gatherLanguages(from input: String) -> [String] {
