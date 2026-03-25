@@ -1,0 +1,18 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "My Key" : {
+      "comment" : "My Comment",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "My Value"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}
