@@ -9,84 +9,70 @@ import ArgumentParser
 import OpenAI
 import Foundation
 
-@main
-struct AITranslate: AsyncParsableCommand {
+public final class AITranslate {
   static let systemPrompt =
     """
     You are a translator tool that translates UI strings for a software application.
     Your inputs will be a source language, a target language, the original text, and
     optionally some context to help you understand how the original text is used within
     the application. Each piece of information will be inside some XML-like tags.
-    In your response include *only* the translation, and do not include any metadata, tags, 
+    In your response include *only* the translation, and do not include any metadata, tags,
     periods, quotes, or new lines, unless included in the original text.
     Placeholders (like %@, %d, %1$@, etc) should be preserved exactly as they appear in the original text.
     Treat multi-letter abbreviations (such as common technical acronyms like "HTML", "URL", "API", "HTTP", "HTTPS", "JSON", "XML", "CPU", "GPU", "RAM", "ID", "UI", "UX", etc) as case-sensitive and do not translate them.
     """
 
-  static func gatherLanguages(from input: String) -> [String] {
-    input.split(separator: ",")
-      .map { String($0).trimmingCharacters(in: .whitespaces) }
-  }
+  let inputFile: URL
+  let languages: [String]
+  let openAIKey: String
+  let verbose: Bool
+  let skipBackup: Bool
+  let force: Bool
 
-  @Argument(transform: URL.init(fileURLWithPath:))
-  var inputFile: URL
-
-  @Option(
-    name: .shortAndLong,
-    help: ArgumentHelp("A comma separated list of language codes (must match the language codes used by xcstrings)"), 
-    transform: AITranslate.gatherLanguages(from:)
-  )
-  var languages: [String]
-
-  @Option(
-    name: .shortAndLong,
-    help: ArgumentHelp("Your OpenAI API key, see: https://platform.openai.com/api-keys")
-  )
-  var openAIKey: String
-
-  @Flag(name: .shortAndLong)
-  var verbose: Bool = false
-
-  @Flag(
-    name: .shortAndLong,
-    help: ArgumentHelp("By default a backup of the input will be created. When this flag is provided, the backup is skipped.")
-  )
-  var skipBackup: Bool = false
-
-  @Flag(
-    name: .shortAndLong,
-    help: ArgumentHelp("Forces all strings to be translated, even if an existing translation is present.")
-  )
-  var force: Bool = false
-
-  lazy var openAI: OpenAI = {
+  lazy var api: API = {
     let configuration = OpenAI.Configuration(
       token: openAIKey,
       organizationIdentifier: nil,
       timeoutInterval: 60.0
     )
 
-    return OpenAI(configuration: configuration)
+    return APIRegistry.current.create(with: configuration)
   }()
 
   var numberOfTranslationsProcessed = 0
 
-  mutating func run() async throws {
+  public init(
+    inputFile: URL,
+    languages: [String],
+    openAIKey: String,
+    verbose: Bool,
+    skipBackup: Bool,
+    force: Bool
+  ) {
+    self.inputFile = inputFile
+    self.languages = languages
+    self.openAIKey = openAIKey
+    self.verbose = verbose
+    self.skipBackup = skipBackup
+    self.force = force
+  }
+
+  public func run() async throws {
     do {
-      let dict = try JSONDecoder().decode(
-        StringsDict.self,
+      let catalog = try JSONDecoder().decode(
+        StringCatalog.self,
         from: try Data(contentsOf: inputFile)
       )
 
-      let totalNumberOfTranslations = dict.strings.count * languages.count
+      let totalNumberOfTranslations = catalog.strings.count * languages.count
       let start = Date()
       var previousPercentage: Int = -1
 
-      for entry in dict.strings {
+      for entry in catalog.strings {
         try await processEntry(
           key: entry.key,
           localizationGroup: entry.value,
-          sourceLanguage: dict.sourceLanguage
+          sourceLanguage: catalog.sourceLanguage
         )
 
         let fractionProcessed = (Double(numberOfTranslationsProcessed) / Double(totalNumberOfTranslations))
@@ -101,7 +87,7 @@ struct AITranslate: AsyncParsableCommand {
         numberOfTranslationsProcessed += languages.count
       }
 
-      try save(dict)
+      try save(catalog)
 
       let formatter = DateComponentsFormatter()
       formatter.allowedUnits = [.hour, .minute, .second]
@@ -114,7 +100,7 @@ struct AITranslate: AsyncParsableCommand {
     }
   }
 
-  mutating func processEntry(
+  func processEntry(
     key: String,
     localizationGroup: LocalizationGroup,
     sourceLanguage: String
@@ -143,7 +129,7 @@ struct AITranslate: AsyncParsableCommand {
         from: sourceLanguage,
         to: lang,
         context: localizationGroup.comment,
-        openAI: openAI
+        api: api
       )
 
       localizationGroup.localizations = localizationEntries
@@ -156,10 +142,10 @@ struct AITranslate: AsyncParsableCommand {
     }
   }
 
-  func save(_ dict: StringsDict) throws {
+  func save(_ catalog: StringCatalog) throws {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys, .prettyPrinted, .withoutEscapingSlashes]
-    let data = try encoder.encode(dict)
+    let data = try encoder.encode(catalog)
 
     try backupInputFileIfNecessary()
     try data.write(to: inputFile)
@@ -186,7 +172,7 @@ struct AITranslate: AsyncParsableCommand {
     from source: String,
     to target: String,
     context: String? = nil,
-    openAI: OpenAI
+    api: API
   ) async throws -> String? {
 
     // Skip text that is generally not translated.
@@ -212,12 +198,12 @@ struct AITranslate: AsyncParsableCommand {
         .init(role: .system, content: Self.systemPrompt)!,
         .init(role: .user, content: translationRequest)!
       ],
-      model: .gpt4_o
+      model: .gpt5_mini
     )
 
     do {
-      let result = try await openAI.chats(query: query)
-      let translation = result.choices.first?.message.content?.string ?? text
+      let result = try await api.chats(query: query)
+      let translation = result.choices.first?.message.content ?? text
 
       if verbose {
         print("[\(target)] " + text + " -> " + translation)
