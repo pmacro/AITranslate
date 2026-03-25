@@ -9,7 +9,7 @@ import ArgumentParser
 import OpenAI
 import Foundation
 
-public final class AITranslate {
+public final class AITranslate: @unchecked Sendable {
   static let systemPrompt =
     """
     You are a translator tool that translates UI strings for a software application.
@@ -39,8 +39,6 @@ public final class AITranslate {
     return APIRegistry.current.create(with: configuration)
   }()
 
-  var numberOfTranslationsProcessed = 0
-
   public init(
     inputFile: URL,
     languages: [String],
@@ -64,27 +62,50 @@ public final class AITranslate {
         from: try Data(contentsOf: inputFile)
       )
 
-      let totalNumberOfTranslations = catalog.strings.count * languages.count
+      let totalEntries = catalog.strings.count
       let start = Date()
       var previousPercentage: Int = -1
+      var entriesCompleted = 0
 
-      for entry in catalog.strings {
-        try await processEntry(
-          key: entry.key,
-          localizationGroup: entry.value,
-          sourceLanguage: catalog.sourceLanguage
-        )
+      // Force lazy initialization before concurrent access.
+      _ = self.api
 
-        let fractionProcessed = (Double(numberOfTranslationsProcessed) / Double(totalNumberOfTranslations))
-        let percentageProcessed = Int(fractionProcessed * 100)
+      let maxConcurrent = 5
 
-        // Print the progress at 10% intervals.
-        if percentageProcessed != previousPercentage, percentageProcessed % 10 == 0 {
-          print("[⏳] \(percentageProcessed)%")
-          previousPercentage = percentageProcessed
+      try await withThrowingTaskGroup(of: Void.self) { group in
+        var inFlight = 0
+
+        for entry in catalog.strings {
+          if inFlight >= maxConcurrent {
+            try await group.next()
+            inFlight -= 1
+            entriesCompleted += 1
+
+            let percentageProcessed = Int(Double(entriesCompleted) / Double(totalEntries) * 100)
+            if percentageProcessed != previousPercentage, percentageProcessed % 10 == 0 {
+              print("[⏳] \(percentageProcessed)%")
+              previousPercentage = percentageProcessed
+            }
+          }
+
+          group.addTask {
+            try await self.processEntry(
+              key: entry.key,
+              localizationGroup: entry.value,
+              sourceLanguage: catalog.sourceLanguage
+            )
+          }
+          inFlight += 1
         }
 
-        numberOfTranslationsProcessed += languages.count
+        while let _ = try await group.next() {
+          entriesCompleted += 1
+          let percentageProcessed = Int(Double(entriesCompleted) / Double(totalEntries) * 100)
+          if percentageProcessed != previousPercentage, percentageProcessed % 10 == 0 {
+            print("[⏳] \(percentageProcessed)%")
+            previousPercentage = percentageProcessed
+          }
+        }
       }
 
       try save(catalog)
