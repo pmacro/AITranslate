@@ -12,7 +12,9 @@ import AITranslateLib
 
 @main
 struct AITranslateCommand: AsyncParsableCommand {
-  static func gatherLanguages(from input: String) -> [String] {
+  static let configuration = CommandConfiguration(commandName: "ai-translate")
+
+  @Sendable static func gatherLanguages(from input: String) -> [String] {
     input.split(separator: ",")
       .map { String($0).trimmingCharacters(in: .whitespaces) }
   }

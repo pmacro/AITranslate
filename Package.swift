@@ -7,6 +7,7 @@ let package = Package(
   name: "ai-translate",
   platforms: [.macOS(.v14)],
   products: [
+    .executable(name: "ai-translate", targets: ["AITranslate"]),
     .library(name: "AITranslateLib", targets: ["AITranslateLib"])
   ],
   dependencies: [
