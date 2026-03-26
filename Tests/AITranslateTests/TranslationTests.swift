@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import OpenAI
 @testable import AITranslateLib
 
 struct TranslationTests {
@@ -178,4 +179,106 @@ struct TranslationTests {
     #expect(group.localizations?["fr"]?.stringUnit?.value == "translated")
     #expect(group.localizations?["es"]?.stringUnit?.value == "translated")
   }
+
+  // MARK: - performBatchTranslation
+
+  @Test func batchTranslationReturnsAllTranslations() async throws {
+    let translate = makeTranslate()
+    let mock = makeMockAPI()
+    mock.batchTranslations = ["Hallo", "Speichern", "Abbrechen"]
+
+    let entries: [(sourceText: String, context: String?)] = [
+      ("Hello", nil),
+      ("Save", "button label"),
+      ("Cancel", nil)
+    ]
+
+    let results = try await translate.performBatchTranslation(
+      entries: entries, from: "en", to: "de", api: mock
+    )
+
+    #expect(results.count == 3)
+    #expect(results[0] == "Hallo")
+    #expect(results[1] == "Speichern")
+    #expect(results[2] == "Abbrechen")
+    #expect(mock.receivedQueries.count == 1)
+  }
+
+  @Test func batchTranslationPassesContext() async throws {
+    let translate = makeTranslate()
+    let mock = makeMockAPI()
+    mock.batchTranslations = ["Datei"]
+
+    let entries: [(sourceText: String, context: String?)] = [
+      ("File", "menu item for file operations")
+    ]
+
+    let results = try await translate.performBatchTranslation(
+      entries: entries, from: "en", to: "de", api: mock
+    )
+
+    #expect(results.count == 1)
+    #expect(results[0] == "Datei")
+
+    // Verify the user message contains the context
+    let query = try #require(mock.receivedQueries.first)
+    // The batch query encodes entries as JSON with context field
+    #expect(mock.receivedQueries.count == 1)
+
+    // Verify query uses responseFormat (batch mode)
+    #expect(query.responseFormat != nil)
+  }
+
+  @Test func batchFallsBackOnCountMismatch() async throws {
+    let translate = makeTranslate()
+    let mock = makeMockAPI()
+    // Return wrong number of translations to trigger fallback
+    mock.batchTranslations = ["Hallo"]
+    mock.responseContent = "fallback"
+
+    let entries: [(sourceText: String, context: String?)] = [
+      ("Hello", nil),
+      ("World", nil),
+      ("Test", nil)
+    ]
+
+    let results = try await translate.performBatchTranslation(
+      entries: entries, from: "en", to: "de", api: mock
+    )
+
+    // Should fall back to individual calls (1 batch + 3 individual = 4 total)
+    #expect(results.count == 3)
+    #expect(mock.receivedQueries.count == 4)
+  }
+
+  @Test func batchFallsBackOnAPIError() async throws {
+    let translate = makeTranslate()
+    let mock = makeMockAPI()
+    mock.error = NSError(domain: "test", code: 500)
+
+    let entries: [(sourceText: String, context: String?)] = [
+      ("Hello", nil)
+    ]
+
+    // When batch fails, it falls back to individual calls which also fail,
+    // returning nil for each entry (performTranslation catches errors).
+    let results = try await translate.performBatchTranslation(
+      entries: entries, from: "en", to: "de", api: mock
+    )
+
+    #expect(results.count == 1)
+    #expect(results[0] == nil)
+    // 1 batch call + 1 individual fallback call = 2 total
+    #expect(mock.receivedQueries.count == 2)
+  }
+
+  @Test func isUntranslatableDetectsEmptyAndSymbols() {
+    let translate = makeTranslate()
+    #expect(translate.isUntranslatable("") == true)
+    #expect(translate.isUntranslatable("   ") == true)
+    #expect(translate.isUntranslatable("$$$") == true)
+    #expect(translate.isUntranslatable("Hello") == false)
+    #expect(translate.isUntranslatable("Hello World") == false)
+  }
 }
+

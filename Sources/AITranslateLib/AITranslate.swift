@@ -22,6 +22,23 @@ public final class AITranslate: @unchecked Sendable {
     Treat multi-letter abbreviations (such as common technical acronyms like "HTML", "URL", "API", "HTTP", "HTTPS", "JSON", "XML", "CPU", "GPU", "RAM", "ID", "UI", "UX", etc) as case-sensitive and do not translate them.
     """
 
+  static let batchSystemPrompt =
+    """
+    You are a translator tool that translates UI strings for a software application.
+    You will receive a JSON array of entries to translate. Each entry has an "id" (integer),
+    "text" (the string to translate), and optionally "context" (describing how the text is used).
+
+    Rules:
+    - Translate each entry's "text" from the source language to the target language.
+    - Include *only* the translation for each entry — no metadata, tags, periods, quotes, or new lines unless present in the original.
+    - Placeholders (like %@, %d, %1$@, etc) must be preserved exactly as they appear.
+    - Multi-letter abbreviations (HTML, URL, API, HTTP, HTTPS, JSON, XML, CPU, GPU, RAM, ID, UI, UX, etc) are case-sensitive and must not be translated.
+
+    Return a JSON object with a "translations" array containing the translated strings in the same order as the input entries.
+    """
+
+  static let batchSize = 20
+
   let inputFile: URL
   let languages: [String]
   let openAIKey: String
@@ -65,45 +82,94 @@ public final class AITranslate: @unchecked Sendable {
         from: try Data(contentsOf: inputFile)
       )
 
-      // Compute per-entry translation count: for each entry, how many languages need translating.
-      var totalTranslations = 0
-      for entry in catalog.strings {
-        for lang in languages {
-          let unit = entry.value.localizations?[lang]
-          if let unit, unit.hasTranslation, force == false {
-            continue
-          }
-          totalTranslations += 1
-        }
-      }
-
-      await reporter.translationStarted(totalEntries: totalTranslations, languages: languages)
-
       // Force lazy initialization before concurrent access.
       _ = self.api
 
+      // Collect all work items, handling untranslatable entries immediately.
+      var workItems: [WorkItem] = []
+
+      for (key, group) in catalog.strings {
+        let localizationEntries = group.localizations ?? [:]
+
+        for lang in languages {
+          let unit = localizationEntries[lang]
+
+          if let unit, unit.hasTranslation, force == false {
+            continue
+          }
+
+          if let unit, unit.isSupportedFormat == false {
+            await reporter.warning("Unsupported format in entry with key: \(key)")
+            continue
+          }
+
+          let sourceText = localizationEntries[catalog.sourceLanguage]?.stringUnit?.value ?? key
+
+          // Handle text that doesn't need API translation.
+          if isUntranslatable(sourceText) {
+            if group.localizations == nil { group.localizations = [:] }
+            group.localizations?[lang] = LocalizationUnit(
+              stringUnit: StringUnit(state: "translated", value: sourceText)
+            )
+            continue
+          }
+
+          workItems.append(WorkItem(
+            key: key,
+            sourceText: sourceText,
+            context: group.comment,
+            localizationGroup: group,
+            language: lang
+          ))
+        }
+      }
+
+      await reporter.translationStarted(totalEntries: workItems.count, languages: languages)
+
+      // Group by language, then chunk into batches.
+      let byLanguage = Dictionary(grouping: workItems, by: \.language)
+      var allBatches: [(language: String, items: [WorkItem])] = []
+
+      for (lang, items) in byLanguage {
+        for chunk in items.chunked(into: Self.batchSize) {
+          allBatches.append((lang, chunk))
+        }
+      }
+
+      // Process batches concurrently, apply results serially.
       let maxConcurrent = 5
 
-      try await withThrowingTaskGroup(of: Void.self) { group in
+      try await withThrowingTaskGroup(
+        of: [(item: WorkItem, translation: String?)].self
+      ) { group in
         var inFlight = 0
 
-        for entry in catalog.strings {
+        for batch in allBatches {
           if inFlight >= maxConcurrent {
-            try await group.next()
+            if let results = try await group.next() {
+              await applyResults(results)
+            }
             inFlight -= 1
           }
 
+          let items = batch.items
+          let lang = batch.language
           group.addTask {
-            try await self.processEntry(
-              key: entry.key,
-              localizationGroup: entry.value,
-              sourceLanguage: catalog.sourceLanguage
+            let inputs = items.map { (sourceText: $0.sourceText, context: $0.context) }
+            let translations = try await self.performBatchTranslation(
+              entries: inputs,
+              from: catalog.sourceLanguage,
+              to: lang,
+              api: self.api
             )
+            return zip(items, translations).map { (item: $0.0, translation: $0.1) }
           }
           inFlight += 1
         }
 
-        while let _ = try await group.next() {}
+        while let results = try await group.next() {
+          await applyResults(results)
+        }
       }
 
       try save(catalog)
@@ -113,6 +179,115 @@ public final class AITranslate: @unchecked Sendable {
       throw error
     }
   }
+
+  private func applyResults(_ results: [(item: WorkItem, translation: String?)]) async {
+    for (item, translation) in results {
+      if item.localizationGroup.localizations == nil {
+        item.localizationGroup.localizations = [:]
+      }
+      item.localizationGroup.localizations?[item.language] = LocalizationUnit(
+        stringUnit: StringUnit(
+          state: translation != nil ? "translated" : "error",
+          value: translation ?? ""
+        )
+      )
+
+      if verbose, let translation {
+        print("[\(item.language)] " + item.sourceText + " -> " + translation)
+      }
+
+      await reporter.translationCompleted(
+        key: item.key,
+        language: item.language,
+        success: translation != nil
+      )
+    }
+  }
+
+  func isUntranslatable(_ text: String) -> Bool {
+    text.isEmpty ||
+      text.trimmingCharacters(
+        in: .whitespacesAndNewlines
+          .union(.symbols)
+          .union(.controlCharacters)
+      ).isEmpty
+  }
+
+  // MARK: - Batch Translation
+
+  func performBatchTranslation(
+    entries: [(sourceText: String, context: String?)],
+    from source: String,
+    to target: String,
+    api: API
+  ) async throws -> [String?] {
+    let batchEntries = entries.enumerated().map { (i, entry) in
+      TranslationBatchEntry(id: i, text: entry.sourceText, context: entry.context)
+    }
+
+    let entriesJSON = try String(
+      data: JSONEncoder().encode(batchEntries),
+      encoding: .utf8
+    )!
+
+    let userMessage = "<source>\(source)</source><target>\(target)</target><entries>\(entriesJSON)</entries>"
+
+    let query = ChatQuery(
+      messages: [
+        .init(role: .system, content: Self.batchSystemPrompt)!,
+        .init(role: .user, content: userMessage)!
+      ],
+      model: .gpt5_mini,
+      responseFormat: .jsonSchema(
+        .init(
+          name: "batch-translations",
+          schema: .derivedJsonSchema(BatchTranslationResponse.self),
+          strict: true
+        )
+      )
+    )
+
+    do {
+      let result = try await api.chats(query: query)
+      let content = result.choices.first?.message.content ?? ""
+
+      guard let data = content.data(using: .utf8),
+            let response = try? JSONDecoder().decode(BatchTranslationResponse.self, from: data),
+            response.translations.count == entries.count else {
+        // Count mismatch or parse failure: fall back to individual calls.
+        await reporter.warning("Batch response mismatch for \(target), falling back to individual translations")
+        return try await fallbackToIndividual(entries: entries, from: source, to: target, api: api)
+      }
+
+      return response.translations.map { $0 as String? }
+    } catch {
+      // Batch call failed entirely: fall back to individual calls.
+      await reporter.warning("Batch call failed for \(target), falling back to individual translations")
+      return try await fallbackToIndividual(entries: entries, from: source, to: target, api: api)
+    }
+  }
+
+  private func fallbackToIndividual(
+    entries: [(sourceText: String, context: String?)],
+    from source: String,
+    to target: String,
+    api: API
+  ) async throws -> [String?] {
+    var results: [String?] = []
+    for entry in entries {
+      let result = try await performTranslation(
+        entry.sourceText,
+        from: source,
+        to: target,
+        context: entry.context,
+        api: api
+      )
+      results.append(result)
+    }
+    return results
+  }
+
+  // MARK: - Single Translation (used by fallback and tests)
 
   func processEntry(
     key: String,
@@ -193,12 +368,7 @@ public final class AITranslate: @unchecked Sendable {
   ) async throws -> String? {
 
     // Skip text that is generally not translated.
-    if text.isEmpty ||
-        text.trimmingCharacters(
-          in: .whitespacesAndNewlines
-            .union(.symbols)
-            .union(.controlCharacters)
-        ).isEmpty {
+    if isUntranslatable(text) {
       return text
     }
 
@@ -235,6 +405,38 @@ public final class AITranslate: @unchecked Sendable {
       }
 
       return nil
+    }
+  }
+}
+
+// MARK: - Batch Types
+
+struct TranslationBatchEntry: Codable {
+  let id: Int
+  let text: String
+  let context: String?
+}
+
+struct BatchTranslationResponse: JSONSchemaConvertible {
+  let translations: [String]
+
+  static var example: BatchTranslationResponse {
+    BatchTranslationResponse(translations: ["Hallo", "Speichern", "Abbrechen"])
+  }
+}
+
+struct WorkItem {
+  let key: String
+  let sourceText: String
+  let context: String?
+  let localizationGroup: LocalizationGroup
+  let language: String
+}
+
+extension Array {
+  func chunked(into size: Int) -> [[Element]] {
+    stride(from: 0, to: count, by: size).map {
+      Array(self[$0..<Swift.min($0 + size, count)])
     }
   }
 }
