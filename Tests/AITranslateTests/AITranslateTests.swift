@@ -20,6 +20,18 @@ struct AITranslateCommandTests {
     #expect(parsed.openAIKey == "test-api-key")
   }
 
+  @Test func parsesNoTuiFlag() throws {
+    let command = try AITranslateCommand.parseAsRoot([
+      "/path/to/Localizable.xcstrings",
+      "-o", "test-api-key",
+      "-l", "de",
+      "--no-tui"
+    ])
+
+    let parsed = try #require(command as? AITranslateCommand)
+    #expect(parsed.noTui == true)
+  }
+
   @Test func mockAPIUsedInTestEnvironment() {
     let translate = AITranslateLib.AITranslate(
       inputFile: URL(fileURLWithPath: "/tmp/test.xcstrings"),
