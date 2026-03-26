@@ -30,6 +30,7 @@ public struct ProgressSnapshot: Sendable {
     public let errorCount: Int
     public let elapsedSeconds: TimeInterval
     public let isFinished: Bool
+    public let recentLogLines: [String]
 
     public var percentage: Int {
         guard totalEntries > 0 else { return 0 }
@@ -47,8 +48,17 @@ public actor TranslationProgress {
     private var errorCount: Int = 0
     private var startTime: Date = Date()
     private var finished: Bool = false
+    private var logLines: [String] = []
+    private let maxLogLines = 200
 
     public init() {}
+
+    public func appendLog(_ message: String) {
+        logLines.append(message)
+        if logLines.count > maxLogLines {
+            logLines.removeFirst(logLines.count - maxLogLines)
+        }
+    }
 
     public func configure(totalEntries: Int, languages: [String], perLanguageCounts: [String: Int] = [:]) {
         self.totalEntries = totalEntries
@@ -112,7 +122,8 @@ public actor TranslationProgress {
             warningCount: warningCount,
             errorCount: errorCount,
             elapsedSeconds: Date().timeIntervalSince(startTime),
-            isFinished: finished
+            isFinished: finished,
+            recentLogLines: logLines
         )
     }
 }

@@ -131,13 +131,35 @@ public final class ProgressDisplay: Sendable {
                 statusIcon = "+"
                 statusLabel = "done   "
             }
-            let langPct = lang.total > 0 ? Int(Double(lang.completed) / Double(lang.total) * 100) : 0
+            let langPct = lang.total > 0 ? min(100, Int(Double(lang.completed) / Double(lang.total) * 100)) : 0
             let langBarWidth = max(5, width - 36)
             let langFilled = Int(Double(langPct) / 100.0 * Double(langBarWidth))
             let langBar = String(repeating: "█", count: langFilled) + String(repeating: "░", count: langBarWidth - langFilled)
             let failStr = lang.failed > 0 ? " (\(lang.failed) failed)" : ""
             let row = "  \(langLabel) \(statusIcon) \(statusLabel) \(langBar) \(String(format: "%3d%%", langPct))\(failStr)"
             lines.append(padLine(row, width: width))
+        }
+
+        // Verbose log section — fill remaining terminal height with recent log lines.
+        if !snapshot.recentLogLines.isEmpty {
+            let height = terminalHeight()
+            // 1 line for bottom border, leave at least 1 blank line of margin
+            let headerLines = lines.count
+            let availableLogRows = max(0, height - headerLines - 2)
+
+            if availableLogRows > 0 {
+                lines.append(padLine("", width: width))
+                let logDivider = "  " + String(repeating: "─", count: width - 4)
+                lines.append(padLine(logDivider, width: width))
+
+                let visibleRows = availableLogRows - 2  // divider + blank we just added
+                let logLines = snapshot.recentLogLines
+                let start = max(0, logLines.count - visibleRows)
+                for i in start..<logLines.count {
+                    let truncated = truncateToWidth(logLines[i], maxWidth: width - 4)
+                    lines.append(padLine("  \(truncated)", width: width))
+                }
+            }
         }
 
         // Bottom border
@@ -147,6 +169,12 @@ public final class ProgressDisplay: Sendable {
         var buf = "\u{1B}[H"
         for line in lines {
             buf += line + "\u{1B}[K\n"  // clear rest of line in case terminal is wider now
+        }
+        // Clear any leftover lines below the panel from a previous frame
+        let height = terminalHeight()
+        let remaining = height - lines.count
+        for _ in 0..<remaining {
+            buf += "\u{1B}[K\n"
         }
 
         writeStderr(buf)
@@ -170,6 +198,19 @@ public final class ProgressDisplay: Sendable {
         let w = displayWidth(str)
         if w >= length { return str }
         return str + String(repeating: " ", count: length - w)
+    }
+
+    private func truncateToWidth(_ string: String, maxWidth: Int) -> String {
+        var width = 0
+        var end = string.startIndex
+        for scalar in string.unicodeScalars {
+            let w = wcwidth(wchar_t(scalar.value))
+            let charWidth = w > 0 ? Int(w) : (w == 0 ? 0 : 1)
+            if width + charWidth > maxWidth { break }
+            width += charWidth
+            end = string.unicodeScalars.index(after: end)
+        }
+        return String(string[string.startIndex..<end])
     }
 
     private func displayWidth(_ string: String) -> Int {
@@ -217,7 +258,6 @@ private func writeStderr(_ string: String) {
 public actor RichProgressReporter: ProgressReporter {
     private let progress: TranslationProgress
     private let display: ProgressDisplay
-    private var verboseMessages: [String] = []
     private let verbose: Bool
 
     public init(verbose: Bool = false) {
@@ -237,19 +277,19 @@ public actor RichProgressReporter: ProgressReporter {
     }
 
     public func verboseLog(_ message: String) {
-        verboseMessages.append(message)
+        Task { await progress.appendLog(message) }
     }
 
     public func warning(_ message: String) {
         if verbose {
-            verboseMessages.append("[⚠️] \(message)")
+            Task { await progress.appendLog("[warn] \(message)") }
         }
         Task { await progress.recordWarning() }
     }
 
     public func error(_ message: String) {
         if verbose {
-            verboseMessages.append("[❌] \(message)")
+            Task { await progress.appendLog("[err] \(message)") }
         }
         Task { await progress.recordError() }
     }
@@ -261,11 +301,6 @@ public actor RichProgressReporter: ProgressReporter {
         // Print summary to main screen after alternate buffer exits
         let elapsed = formatElapsed(snap.elapsedSeconds)
         print("[✅] Translation complete (\(elapsed) elapsed, \(snap.warningCount) warnings, \(snap.errorCount) errors)")
-
-        // Print buffered verbose messages after panel teardown
-        for msg in verboseMessages {
-            print(msg)
-        }
     }
 
     private func formatElapsed(_ seconds: TimeInterval) -> String {
