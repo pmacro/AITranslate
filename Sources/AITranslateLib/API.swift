@@ -40,6 +40,8 @@ extension OpenAI: API {}
 
 class MockAPI: API {
   var responseContent = "mock translation"
+  /// Per-entry translations for batch calls. When set, batch queries return these instead of `responseContent`.
+  var batchTranslations: [String]?
   var error: Error?
   private(set) var receivedQueries: [ChatQuery] = []
 
@@ -48,7 +50,18 @@ class MockAPI: API {
   ) async throws -> ChatResult {
     receivedQueries.append(query)
     if let error { throw error }
-    let escaped = responseContent
+
+    let content: String
+
+    // Detect batch queries by checking for responseFormat (JSON schema).
+    if query.responseFormat != nil, let batchTranslations {
+      let response = BatchTranslationResponse(translations: batchTranslations)
+      content = String(data: try JSONEncoder().encode(response), encoding: .utf8)!
+    } else {
+      content = responseContent
+    }
+
+    let escaped = content
       .replacingOccurrences(of: "\\", with: "\\\\")
       .replacingOccurrences(of: "\"", with: "\\\"")
       .replacingOccurrences(of: "\n", with: "\\n")
