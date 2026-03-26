@@ -28,6 +28,7 @@ public final class AITranslate: @unchecked Sendable {
   let verbose: Bool
   let skipBackup: Bool
   let force: Bool
+  let reporter: ProgressReporter
 
   lazy var api: API = {
     let configuration = OpenAI.Configuration(
@@ -45,7 +46,8 @@ public final class AITranslate: @unchecked Sendable {
     openAIKey: String,
     verbose: Bool,
     skipBackup: Bool,
-    force: Bool
+    force: Bool,
+    reporter: ProgressReporter? = nil
   ) {
     self.inputFile = inputFile
     self.languages = languages
@@ -53,6 +55,7 @@ public final class AITranslate: @unchecked Sendable {
     self.verbose = verbose
     self.skipBackup = skipBackup
     self.force = force
+    self.reporter = reporter ?? SimpleProgressReporter()
   }
 
   public func run() async throws {
@@ -62,10 +65,19 @@ public final class AITranslate: @unchecked Sendable {
         from: try Data(contentsOf: inputFile)
       )
 
-      let totalEntries = catalog.strings.count
-      let start = Date()
-      var previousPercentage: Int = -1
-      var entriesCompleted = 0
+      // Compute per-entry translation count: for each entry, how many languages need translating.
+      var totalTranslations = 0
+      for entry in catalog.strings {
+        for lang in languages {
+          let unit = entry.value.localizations?[lang]
+          if let unit, unit.hasTranslation, force == false {
+            continue
+          }
+          totalTranslations += 1
+        }
+      }
+
+      await reporter.translationStarted(totalEntries: totalTranslations, languages: languages)
 
       // Force lazy initialization before concurrent access.
       _ = self.api
@@ -79,13 +91,6 @@ public final class AITranslate: @unchecked Sendable {
           if inFlight >= maxConcurrent {
             try await group.next()
             inFlight -= 1
-            entriesCompleted += 1
-
-            let percentageProcessed = Int(Double(entriesCompleted) / Double(totalEntries) * 100)
-            if percentageProcessed != previousPercentage, percentageProcessed % 10 == 0 {
-              print("[⏳] \(percentageProcessed)%")
-              previousPercentage = percentageProcessed
-            }
           }
 
           group.addTask {
@@ -98,25 +103,13 @@ public final class AITranslate: @unchecked Sendable {
           inFlight += 1
         }
 
-        while let _ = try await group.next() {
-          entriesCompleted += 1
-          let percentageProcessed = Int(Double(entriesCompleted) / Double(totalEntries) * 100)
-          if percentageProcessed != previousPercentage, percentageProcessed % 10 == 0 {
-            print("[⏳] \(percentageProcessed)%")
-            previousPercentage = percentageProcessed
-          }
-        }
+        while let _ = try await group.next() {}
       }
 
       try save(catalog)
-
-      let formatter = DateComponentsFormatter()
-      formatter.allowedUnits = [.hour, .minute, .second]
-      formatter.unitsStyle = .full
-      let formattedString = formatter.string(from: Date().timeIntervalSince(start))!
-
-      print("[✅] 100% \n[⏰] Translations time: \(formattedString)")
+      await reporter.finished()
     } catch let error {
+      await reporter.finished()
       throw error
     }
   }
@@ -137,7 +130,7 @@ public final class AITranslate: @unchecked Sendable {
 
       // Skip the ones with variations/substitutions since they are not supported.
       if let unit, unit.isSupportedFormat == false {
-        print("[⚠️] Unsupported format in entry with key: \(key)")
+        await reporter.warning("Unsupported format in entry with key: \(key)")
         continue
       }
 
@@ -160,6 +153,9 @@ public final class AITranslate: @unchecked Sendable {
           value: result ?? ""
         )
       )
+
+      let success = result != nil
+      await reporter.translationCompleted(key: key, language: lang, success: success)
     }
   }
 
@@ -232,7 +228,7 @@ public final class AITranslate: @unchecked Sendable {
 
       return translation
     } catch let error {
-      print("[❌] Failed to translate \(text) into \(target)")
+      await reporter.error("Failed to translate \(text) into \(target)")
 
       if verbose {
         print("[💥]" + error.localizedDescription)
