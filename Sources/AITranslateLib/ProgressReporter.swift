@@ -8,7 +8,7 @@
 import Foundation
 
 public protocol ProgressReporter: Sendable {
-    func translationStarted(totalEntries: Int, languages: [String]) async
+    func translationStarted(totalEntries: Int, languages: [String], perLanguageCounts: [String: Int]) async
     func translationCompleted(key: String, language: String, success: Bool) async
     func verboseLog(_ message: String) async
     func warning(_ message: String) async
@@ -26,7 +26,7 @@ public actor SimpleProgressReporter: ProgressReporter {
 
     public init() {}
 
-    public func translationStarted(totalEntries: Int, languages: [String]) {
+    public func translationStarted(totalEntries: Int, languages: [String], perLanguageCounts: [String: Int]) {
         self.totalEntries = totalEntries
         self.startTime = Date()
         self.entriesCompleted = 0

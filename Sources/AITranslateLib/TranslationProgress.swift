@@ -50,7 +50,7 @@ public actor TranslationProgress {
 
     public init() {}
 
-    public func configure(totalEntries: Int, languages: [String]) {
+    public func configure(totalEntries: Int, languages: [String], perLanguageCounts: [String: Int] = [:]) {
         self.totalEntries = totalEntries
         self.languageOrder = languages
         self.startTime = Date()
@@ -60,10 +60,11 @@ public actor TranslationProgress {
         self.warningCount = 0
         self.errorCount = 0
 
+        let defaultPerLang = languages.isEmpty ? 0 : totalEntries / languages.count
         for lang in languages {
             languageStates[lang] = LanguageState(
                 language: lang,
-                total: totalEntries,
+                total: perLanguageCounts[lang] ?? defaultPerLang,
                 status: .pending
             )
         }

@@ -227,8 +227,8 @@ public actor RichProgressReporter: ProgressReporter {
         self.verbose = verbose
     }
 
-    public func translationStarted(totalEntries: Int, languages: [String]) async {
-        await progress.configure(totalEntries: totalEntries, languages: languages)
+    public func translationStarted(totalEntries: Int, languages: [String], perLanguageCounts: [String: Int]) async {
+        await progress.configure(totalEntries: totalEntries, languages: languages, perLanguageCounts: perLanguageCounts)
         display.start()
     }
 

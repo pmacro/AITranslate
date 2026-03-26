@@ -124,16 +124,33 @@ public final class AITranslate: @unchecked Sendable {
         }
       }
 
-      await reporter.translationStarted(totalEntries: workItems.count, languages: languages)
-
-      // Group by language, then chunk into batches.
       let byLanguage = Dictionary(grouping: workItems, by: \.language)
-      var allBatches: [(language: String, items: [WorkItem])] = []
+      let perLanguageCounts = byLanguage.mapValues { $0.count }
+      let activeLanguages = languages.filter { byLanguage[$0] != nil }
 
-      for (lang, items) in byLanguage {
-        for chunk in items.chunked(into: Self.batchSize) {
-          allBatches.append((lang, chunk))
+      await reporter.translationStarted(
+        totalEntries: workItems.count,
+        languages: activeLanguages,
+        perLanguageCounts: perLanguageCounts
+      )
+
+      // Chunk each language's items into batches, then interleave across languages
+      // so the overall progress bar advances evenly.
+      var perLanguageBatches: [[(language: String, items: [WorkItem])]] = []
+      for lang in activeLanguages {
+        guard let items = byLanguage[lang] else { continue }
+        perLanguageBatches.append(items.chunked(into: Self.batchSize).map { (lang, $0) })
+      }
+
+      var allBatches: [(language: String, items: [WorkItem])] = []
+      var index = 0
+      while allBatches.count < perLanguageBatches.reduce(0, { $0 + $1.count }) {
+        for langBatches in perLanguageBatches {
+          if index < langBatches.count {
+            allBatches.append(langBatches[index])
+          }
         }
+        index += 1
       }
 
       // Process batches concurrently, apply results serially.
