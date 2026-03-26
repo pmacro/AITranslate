@@ -193,7 +193,7 @@ public final class AITranslate: @unchecked Sendable {
       )
 
       if verbose, let translation {
-        print("[\(item.language)] " + item.sourceText + " -> " + translation)
+        await reporter.verboseLog("[\(item.language)] " + item.sourceText + " -> " + translation)
       }
 
       await reporter.translationCompleted(
@@ -393,7 +393,7 @@ public final class AITranslate: @unchecked Sendable {
       let translation = result.choices.first?.message.content ?? text
 
       if verbose {
-        print("[\(target)] " + text + " -> " + translation)
+        await reporter.verboseLog("[\(target)] " + text + " -> " + translation)
       }
 
       return translation
@@ -401,7 +401,7 @@ public final class AITranslate: @unchecked Sendable {
       await reporter.error("Failed to translate \(text) into \(target)")
 
       if verbose {
-        print("[💥]" + error.localizedDescription)
+        await reporter.verboseLog("[💥] " + error.localizedDescription)
       }
 
       return nil

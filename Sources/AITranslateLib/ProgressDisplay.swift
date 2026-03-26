@@ -236,6 +236,10 @@ public actor RichProgressReporter: ProgressReporter {
         await progress.recordCompletion(key: key, language: language, success: success)
     }
 
+    public func verboseLog(_ message: String) {
+        verboseMessages.append(message)
+    }
+
     public func warning(_ message: String) {
         if verbose {
             verboseMessages.append("[⚠️] \(message)")

@@ -10,6 +10,7 @@ import Foundation
 public protocol ProgressReporter: Sendable {
     func translationStarted(totalEntries: Int, languages: [String]) async
     func translationCompleted(key: String, language: String, success: Bool) async
+    func verboseLog(_ message: String) async
     func warning(_ message: String) async
     func error(_ message: String) async
     func finished() async
@@ -40,6 +41,10 @@ public actor SimpleProgressReporter: ProgressReporter {
             print("[⏳] \(pct)%")
             previousPercentage = pct
         }
+    }
+
+    public func verboseLog(_ message: String) {
+        print(message)
     }
 
     public func warning(_ message: String) {
