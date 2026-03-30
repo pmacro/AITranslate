@@ -4,7 +4,7 @@ This is a small, simple, utility that parses an Xcode `.xcstrings` file, asks Ch
 
 This tool is hardcoded to use GPT-5 mini. Selecting a model via a command-line flag has been deliberately omitted to ensure this tool does not contribute to a proliferation of poor translations in apps on Apple platforms.
 
-Please note that is **very strongly** recommend to have translations tested by a qualified human as even ChatGPT-4 will almost certainly not produce perfect results.
+Please note that is **very strongly** recommended to have translations tested by a qualified human as even frontier models will almost certainly not produce perfect results.
 
 ## Missing Features
 
