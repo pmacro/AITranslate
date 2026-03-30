@@ -45,6 +45,7 @@ public final class AITranslate: @unchecked Sendable {
   let verbose: Bool
   let skipBackup: Bool
   let force: Bool
+  let matchXcodeOrdering: Bool
   let reporter: ProgressReporter
 
   lazy var api: API = {
@@ -64,6 +65,7 @@ public final class AITranslate: @unchecked Sendable {
     verbose: Bool,
     skipBackup: Bool,
     force: Bool,
+    matchXcodeOrdering: Bool = false,
     reporter: ProgressReporter? = nil
   ) {
     self.inputFile = inputFile
@@ -72,6 +74,7 @@ public final class AITranslate: @unchecked Sendable {
     self.verbose = verbose
     self.skipBackup = skipBackup
     self.force = force
+    self.matchXcodeOrdering = matchXcodeOrdering
     self.reporter = reporter ?? SimpleProgressReporter()
   }
 
@@ -352,9 +355,20 @@ public final class AITranslate: @unchecked Sendable {
   }
 
   func save(_ catalog: StringCatalog) throws {
-    let encoder = JSONEncoder()
-    encoder.outputFormatting = [.sortedKeys, .prettyPrinted, .withoutEscapingSlashes]
-    let data = try encoder.encode(catalog)
+    let data: Data
+
+    if matchXcodeOrdering {
+      let encoded = try JSONEncoder().encode(catalog)
+      let jsonObject = try JSONSerialization.jsonObject(with: encoded)
+      data = try JSONSerialization.data(
+        withJSONObject: jsonObject,
+        options: [.sortedKeys, .prettyPrinted, .withoutEscapingSlashes]
+      )
+    } else {
+      let encoder = JSONEncoder()
+      encoder.outputFormatting = [.sortedKeys, .prettyPrinted, .withoutEscapingSlashes]
+      data = try encoder.encode(catalog)
+    }
 
     try backupInputFileIfNecessary()
     try data.write(to: inputFile)
