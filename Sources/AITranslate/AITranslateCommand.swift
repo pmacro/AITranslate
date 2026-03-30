@@ -57,6 +57,12 @@ struct AITranslateCommand: AsyncParsableCommand {
 
   @Flag(
     name: .long,
+    help: ArgumentHelp("Sort JSON keys to match Xcode's xcstrings ordering.")
+  )
+  var matchXcodeOrdering: Bool = false
+
+  @Flag(
+    name: .long,
     help: ArgumentHelp("Disable the rich terminal UI and use simple text output instead.")
   )
   var noTui: Bool = false
@@ -74,6 +80,7 @@ struct AITranslateCommand: AsyncParsableCommand {
       verbose: verbose,
       skipBackup: skipBackup,
       force: force,
+      matchXcodeOrdering: matchXcodeOrdering,
       reporter: reporter
     ).run()
   }
